@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Kiểm tra nội dung</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+</head>
+
+<body>
+    <div id="toast"></div>
+
+    <header class="header">
+        <div class="header-content">
+            <span class="hamburger-menu">
+                <i class="fas fa-bars"></i>
+            </span>
+            <span class="logo">Kiểm tra nội dung SPAM</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="image-section">
+            <img alt="Image" class="background-image" src="/static/img/image.jpg">
+        </div>
+
+        <div class="container">
+            <div class="header">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+            </div>
+            <div class="title">Nhập nội dung</div>
+            <textarea id="orderMessage" name="message" placeholder="Nhập nội dung..." rows="16"></textarea>
+            <button class="button check-button" onclick="checkSpam()">Kiểm tra</button>
+
+            <div class="result">
+                <div id="chartContainer" style="height: 260px; width: 260px;"></div>
+                <div id="accuracy">Độ chính xác: 0%</div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>Thiết kế bởi Nguyễn Văn Dũng - N21DCCN020, Trần Kim An - N21DCCN002</p>
+        </div>
+    </footer>
+
+    <script>
+        function checkSpam() {
+            const message = document.getElementById('orderMessage').value.trim();
+            const resultDiv = document.querySelector('.result');
+            const accuracyDiv = document.getElementById('accuracy');
+
+            if (message === "") {
+                resultDiv.style.display = "none";
+                toast({
+                    title: "Thông báo!",
+                    message: "Nhập nội dung để kiểm tra.",
+                    type: "error",
+                    duration: 1000
+                });
+            } else {
+                // Hiển thị biểu đồ và ẩn kết quả trước khi gọi API
+                resultDiv.style.display = "flex";
+
+                // Gửi yêu cầu POST đến API FastAPI
+                fetch('http://127.0.0.1:8004/predict/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: message }),
+                })
+                    .then(response => response.json())  // Chuyển dữ liệu nhận được thành JSON
+                    .then(data => {
+                        processPrediction(data);  // Xử lý kết quả và cập nhật giao diện
+                    })
+                    .catch(error => {
+                        console.error("Có lỗi xảy ra khi gọi API:", error);
+                        resultDiv.style.display = "none";  // Ẩn kết quả nếu có lỗi
+                        toast({
+                            title: "Lỗi!",
+                            message: "Không thể kiểm tra, vui lòng thử lại.",
+                            type: "error",
+                            duration: 1000
+                        });
+                    });
+            }
+        }
+
+        function processPrediction(data) {
+            const label = data.prediction;  // Spam hoặc Ham
+            const confidence = data.confidence;  // Độ chính xác từ API
+
+            // Cập nhật độ chính xác
+            const accuracyDiv = document.getElementById('accuracy');
+            accuracyDiv.textContent = `Độ chính xác: ${Math.round(confidence * 100)}%`;
+
+            // Cập nhật biểu đồ SPAM và HAM
+            updateChart(label, confidence);
+        }
+
+        function updateChart(label, confidence) {
+            const chart = new CanvasJS.Chart("chartContainer", {
+                animationEnabled: true,
+                title: {
+                    text: `Dự đoán: ${label}`,
+                    fontFamily: "Arial, sans-serif",
+                    fontWeight: "bold",
+                },
+                data: [{
+                    type: "pie",
+                    startAngle: 240,
+                    yValueFormatString: "##0.00\"%\"",
+                    indexLabel: "{label} {y}",
+                    dataPoints: [
+                        { y: confidence * 100, label: label },
+                        { y: (1 - confidence) * 100, label: label === "Spam" ? "Ham" : "Spam" }
+                    ]
+                }],
+                creditText: "", // Loại bỏ văn bản credit (CanvasJS)
+                creditHref: ""  // Loại bỏ liên kết đến CanvasJS.com
+            });
+            chart.render();
+        }
+
+        function toast({ title = "", message = "", type = "info", duration = 3000 }) {
+            const main = document.getElementById("toast");
+            if (main) {
+                const toast = document.createElement("div");
+
+                const autoRemoveId = setTimeout(function () {
+                    main.removeChild(toast);
+                }, duration + 1000);
+
+                toast.onclick = function (e) {
+                    if (e.target.closest(".toast__close")) {
+                        main.removeChild(toast);
+                        clearTimeout(autoRemoveId);
+                    }
+                };
+
+                const icons = {
+                    error: "fas fa-exclamation-circle"
+                };
+                const icon = icons[type];
+                const delay = (duration / 1000).toFixed(2);
+
+                toast.classList.add("toast", `toast--${type}`);
+                toast.style.animation = `slideInLeft ease .3s, fadeOut linear 1s ${delay}s forwards`;
+
+                toast.innerHTML = `
+                        <div class="toast__icon">
+                        </div>
+                        <div class="toast__body">
+                            <h3 class="toast__title">${title}</h3>
+                            <p class="toast__msg">${message}</p>
+                        </div>
+                        <div class="toast__close">
+                            <i class="fas fa-times"></i>
+                        </div>
+                    `;
+                const toastIcon = toast.querySelector('.toast__icon');
+                if (toastIcon) {
+                    const iconElement = document.createElement('i');
+                    iconElement.className = icon;
+                    toastIcon.appendChild(iconElement);
+                }
+                const toastMessage = toast.querySelector('.toast__msg');
+                toastMessage.textContent = message;
+                const toastTitle = toast.querySelector('.toast__title');
+                toastTitle.textContent = title;
+                main.appendChild(toast);
+            }
+        }
+
+        document.getElementById('orderMessage').addEventListener('input', function () {
+            const message = this.value.trim();
+            const resultDiv = document.querySelector('.result');
+
+            if (message === "") {
+                resultDiv.style.display = "none"; // Ẩn nếu không có nội dung
+            }
+        });
+
+    </script>
+</body>
+
+</html>
